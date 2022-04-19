@@ -1,112 +1,180 @@
-const VoiceResponse = require('twilio').twiml.VoiceResponse;
 
-exports.welcome = function welcome() {
-  const voiceResponse = new VoiceResponse();
+// const VoiceResponse = require('twilio').twiml.VoiceResponse;
 
-  const gather = voiceResponse.gather({
-    action: '/ivr/menu',
-    numDigits: '1',
-    method: 'POST',
-  });
+const disconnectTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+  <Response>
+  <Say voice="Polly.Joanna" language="en-US">
+  Thank you!
+  </Say>
+  <Pause>1</Pause>
+  <Say voice="Polly.Joanna" language="en-US">
+  We look forward to seeing you!
+  </Say>
+  <Pause>1</Pause>
+  <Hangup/>
+  </Response>`;
 
-  gather.say(
-    'Thanks for calling the E T Phone Home Service. ' +
-    'Please press 1 for directions. ' +
-    'Press 2 for a list of planets to call.',
-    {loop: 3}
-  );
+const confirmAppointmentTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+<Say voice="Polly.Joanna" language="en-US">
+<p>Your appointment is confirmed.</p>
+</Say>
+<Say voice="Polly.Joanna" language="en-US">
+<p>We look forward to seeing you.</p>
+</Say>
+<Hangup/>
+</Response>`;
 
-  return voiceResponse.toString();
+const redirectWelcomeTwiml = `<?xml version="1.0" encoding="UTF-8"?><Response>
+<Say voice="Joanna" language="en-US">
+Replay message
+</Say>
+<Redirect>/ivr/welcome</Redirect>
+</Response>`;
+
+
+const appointmentConfirmStartTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+<Gather input="speech dtmf" timeout="5" 
+ numDigits="1" action="/ivr/menu" method="POST">
+
+<Say voice="Polly.Joanna">
+
+<prosody  rate="90%" >
+Appointment Reminder for Tammy,
+<break time='300ms'/>
+You have an appointment with:
+<break time='300ms'/>
+Dr. Jeffrey Ross Gunter MD  
+<break time='300ms'/>
+on:
+4/20/2022 
+<break time='500ms'/>
+at 07:00 PM
+<break time='300ms'/>
+at:
+Canyon Dermatology and Skin Cancer Center.
+<break time='500ms'/>
+We are located at:
+1101 4th Avenue, Canyon, TX
+<break time='1000ms'/>
+If you have any questions, you can call us at:
+<say-as interpret-as="telephone">(806)391-8220</say-as>
+<break time='1000ms'/>
+To confirm this appointment, press 1.
+<break time='1000ms'/>
+To hear this appointment message again, press 2.
+<break time='1000ms'/>
+To end this call, press 3.
+<break time='5000ms'/>
+</prosody>
+
+<prosody  rate="100%" pitch="+10%" >
+<p>Thank You!</p>
+<p>We look forward to seeing you!</p>
+</prosody>
+
+<break time='1000ms'/>
+
+</Say>
+</Gather>
+</Response>
+`;
+
+const badKeyPressedTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+<Gather input="speech dtmf" timeout="5" 
+ numDigits="1" action="/ivr/menu" method="POST">
+
+<Say voice="Polly.Joanna">
+
+<prosody  rate="90%" >
+<p>Unknown key pressed<p>
+To confirm this appointment, press 1.
+<break time='1000ms'/>
+To hear this appointment message again, press 2.
+<break time='1000ms'/>
+To end this call, press 3.
+<break time='5000ms'/>
+</prosody>
+
+<prosody  rate="100%" pitch="+10%" >
+<p>Thank You!</p>
+<p>We look forward to seeing you!</p>
+</prosody>
+
+<break time='1000ms'/>
+
+</Say>
+</Gather>
+</Response>
+`;
+
+exports.welcome = function welcome(body) {
+  console.log('welcome body:', body);
+
+  // Based on the direction of the call figure out who called/we called
+  let recipientPhone;
+  if(body.Direction == 'inbound')
+    recipientPhone = body.Caller;
+  else recipientPhone = body.To;
+
+  // Look up this phone number for pending appointment confirmations in database
+  console.log('Playing Appointment Reminder for Recipient @', recipientPhone);
+
+  return appointmentConfirmStartTwiml;
 };
 
-exports.menu = function menu(digit) {
-  const optionActions = {
-    '1': giveExtractionPointInstructions,
-    '2': listPlanets,
-  };
-
-  return (optionActions[digit])
-    ? optionActions[digit]()
-    : redirectWelcome();
-};
-
-exports.planets = function planets(digit) {
-  const optionActions = {
-    '2': '+12024173378',
-    '3': '+12027336386',
-    '4': '+12027336637',
-  };
-
-  if (optionActions[digit]) {
-    const twiml = new VoiceResponse();
-    twiml.dial(optionActions[digit]);
-    return twiml.toString();
+exports.menu = function menu(digit, body) {
+  console.log('menu body:', body);
+  console.log('menu digit:', digit);
+  switch (digit) {
+    case '1':
+      return confirmAppointment(body);
+    case '2':
+      return redirectWelcomeTwiml;
+    case '3':
+      return disconnectCall(body);
+    default:
+      return badKeyPressedTwiml;
   }
-
-  return redirectWelcome();
 };
+
 
 /**
+ * ConfirmAppointment
  * Returns Twiml
  * @return {String}
  */
-function giveExtractionPointInstructions() {
-  const twiml = new VoiceResponse();
+function confirmAppointment(body) {
+// Based on the direction of the call figure out who called/we called
+  let recipientPhone;
+  if(body.Direction == 'inbound')
+    recipientPhone = body.Caller;
+  else recipientPhone = body.To;
 
-  twiml.say(
-    'To get to your extraction point, get on your bike and go down ' +
-    'the street. Then Left down an alley. Avoid the police cars. Turn left ' +
-    'into an unfinished housing development. Fly over the roadblock. Go ' +
-    'passed the moon. Soon after you will see your mother ship.',
-    {voice: 'alice', language: 'en-GB'}
-  );
+  // Look up this phone number for pending appointment confirmations in database
+  console.log('Confirming Appointment for Recipient @', recipientPhone);
 
-  twiml.say(
-    'Thank you for calling the ET Phone Home Service - the ' +
-    'adventurous alien\'s first choice in intergalactic travel'
-  );
-
-  twiml.hangup();
-
-  return twiml.toString();
+  return confirmAppointmentTwiml;
 }
 
 /**
- * Returns a TwiML to interact with the client
+ * Disconnect call via press of #3
+ * Returns Twiml
  * @return {String}
  */
-function listPlanets() {
-  const twiml = new VoiceResponse();
+function disconnectCall(body) {
+  // Based on the direction of the call figure out who called/we called
+  let recipientPhone;
+  if(body.Direction == 'inbound')
+    recipientPhone = body.Caller;
+  else recipientPhone = body.To;
 
-  const gather = twiml.gather({
-    action: '/ivr/planets',
-    numDigits: '1',
-    method: 'POST',
-  });
+  // Look up this phone number for pending appointment confirmations in database
+  console.log('disconnectCall Appointment for Recipient @', recipientPhone);
 
-  gather.say(
-    'To call the planet Broh doe As O G, press 2. To call the planet DuhGo ' +
-    'bah, press 3. To call an oober asteroid to your location, press 4. To ' +
-    'go back to the main menu, press the star key ',
-    {voice: 'alice', language: 'en-GB', loop: 3}
-  );
 
-  return twiml.toString();
+  return disconnectTwiml;
 }
 
-/**
- * Returns an xml with the redirect
- * @return {String}
- */
-function redirectWelcome() {
-  const twiml = new VoiceResponse();
-
-  twiml.say('Returning to the main menu', {
-    voice: 'alice',
-    language: 'en-GB',
-  });
-
-  twiml.redirect('/ivr/welcome');
-
-  return twiml.toString();
-}
